@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: morii-weiguang
+    runtime: python
+    plan: free
+    region: singapore
+    branch: master
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5-mini
+      - key: MORII_PERSONA_NAME
+        value: 微光
+      - key: MORII_PERSONA_TAGLINE
+        value: 像一个沉静、真诚、不评判人的深夜来信朋友。
+      - key: CRISIS_SUPPORT_TEXT
+        value: 如果你有可能马上伤害自己、伤害他人，或已经无法保证安全，请立刻联系当地紧急服务，或者马上去最近的医院/急诊。也请尽快联系一个你信任的人，让对方现在陪着你。
