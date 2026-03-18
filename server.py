@@ -10,7 +10,9 @@ from urllib import error, request
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_FILE = BASE_DIR / "index.html"
 ENV_FILE = BASE_DIR / ".env"
-OPENAI_URL = "https://api.openai.com/v1/responses"
+DEFAULT_AI_PROVIDER = "groq"
+DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
 DEFAULT_PERSONA_NAME = "微光"
 DEFAULT_PERSONA_TAGLINE = "像一个沉静、真诚、不评判人的深夜来信朋友。"
 DEFAULT_CRISIS_SUPPORT_TEXT = "如果你有可能马上伤害自己、伤害他人，或已经无法保证安全，请立刻联系当地紧急服务，或马上去最近的医院/急诊。也请尽快联系一个你信任的人，让对方现在陪着你。"
@@ -87,6 +89,35 @@ def get_persona_tagline() -> str:
 
 def get_crisis_support_text() -> str:
     return os.getenv("CRISIS_SUPPORT_TEXT", DEFAULT_CRISIS_SUPPORT_TEXT).strip()
+
+
+def get_ai_provider() -> str:
+    value = os.getenv("AI_PROVIDER", DEFAULT_AI_PROVIDER).strip().lower()
+    return value or DEFAULT_AI_PROVIDER
+
+
+def get_ai_key() -> str:
+    return (
+        os.getenv("GROQ_API_KEY", "").strip()
+        or os.getenv("OPENAI_API_KEY", "").strip()
+    )
+
+
+def get_ai_model() -> str:
+    return (
+        os.getenv("GROQ_MODEL", "").strip()
+        or os.getenv("OPENAI_MODEL", "").strip()
+        or DEFAULT_GROQ_MODEL
+    )
+
+
+def get_responses_url() -> str:
+    if get_ai_provider() == "openai":
+        base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
+    else:
+        base_url = os.getenv("GROQ_BASE_URL", DEFAULT_GROQ_BASE_URL).strip()
+
+    return base_url.rstrip("/") + "/responses"
 
 
 def build_system_prompt() -> str:
@@ -239,12 +270,14 @@ class MoriiHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/api/health":
-            model = os.getenv("OPENAI_MODEL", "gpt-5-mini")
-            has_key = bool(os.getenv("OPENAI_API_KEY"))
+            model = get_ai_model()
+            provider = get_ai_provider()
+            has_key = bool(get_ai_key())
             self._send_json({
                 "ok": True,
                 "ai_configured": has_key,
                 "mode": "ai" if has_key else "demo",
+                "provider": provider,
                 "model": model,
                 "crisis_support_text": get_crisis_support_text(),
                 "persona_name": get_persona_name(),
@@ -282,24 +315,24 @@ class MoriiHandler(BaseHTTPRequestHandler):
                 })
                 return
 
-            if not os.getenv("OPENAI_API_KEY"):
+            if not get_ai_key():
                 self._send_json(
-                    {"error": "OPENAI_API_KEY is not configured on the server."},
+                    {"error": f"{get_ai_provider().upper()} API key is not configured on the server."},
                     HTTPStatus.SERVICE_UNAVAILABLE
                 )
                 return
 
-            response_text = self._call_openai(messages, memory_items)
+            response_text = self._call_ai(messages, memory_items)
             self._send_json({"reply": response_text, "mode": "ai"})
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
             self._send_json(
-                {"error": "OpenAI request failed.", "detail": detail},
+                {"error": f"{get_ai_provider().title()} request failed.", "detail": detail},
                 HTTPStatus.BAD_GATEWAY
             )
         except error.URLError as exc:
             self._send_json(
-                {"error": "Unable to reach OpenAI.", "detail": str(exc.reason)},
+                {"error": f"Unable to reach {get_ai_provider().title()}.", "detail": str(exc.reason)},
                 HTTPStatus.BAD_GATEWAY
             )
         except json.JSONDecodeError:
@@ -313,9 +346,9 @@ class MoriiHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         return
 
-    def _call_openai(self, messages, memory_items) -> str:
-        model = os.getenv("OPENAI_MODEL", "gpt-5-mini")
-        api_key = os.getenv("OPENAI_API_KEY")
+    def _call_ai(self, messages, memory_items) -> str:
+        model = get_ai_model()
+        api_key = get_ai_key()
         memory_prompt = build_memory_prompt(memory_items)
 
         prompt_inputs = [
@@ -333,12 +366,9 @@ class MoriiHandler(BaseHTTPRequestHandler):
             "max_output_tokens": 360
         }
 
-        if os.getenv("OPENAI_USER_ID"):
-            request_body["safety_identifier"] = os.getenv("OPENAI_USER_ID")
-
         raw_request = json.dumps(request_body).encode("utf-8")
         api_request = request.Request(
-            OPENAI_URL,
+            get_responses_url(),
             data=raw_request,
             headers={
                 "Authorization": f"Bearer {api_key}",
@@ -352,7 +382,7 @@ class MoriiHandler(BaseHTTPRequestHandler):
 
         text = extract_output_text(payload)
         if not text:
-            raise RuntimeError("OpenAI returned no assistant text.")
+            raise RuntimeError(f"{get_ai_provider().title()} returned no assistant text.")
 
         return text
 
@@ -361,7 +391,11 @@ def main() -> None:
     load_env_file(ENV_FILE)
     port = int(os.getenv("PORT", "3000"))
     server = ThreadingHTTPServer(("0.0.0.0", port), MoriiHandler)
-    print(f"Morii server is running at http://localhost:{port}", flush=True)
+    print(
+        f"Morii server is running at http://localhost:{port} "
+        f"using {get_ai_provider()} / {get_ai_model()}",
+        flush=True
+    )
     server.serve_forever()
 
 

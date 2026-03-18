@@ -595,7 +595,7 @@
         state.personaTagline = data.persona_tagline || state.personaTagline;
         state.crisisSupportText = data.crisis_support_text || state.crisisSupportText;
         refreshPersonaUi();
-        if (data.ai_configured) setStatus("AI 陪伴已连接", `当前会优先使用 ${data.model || "AI"} 生成更自然的回应。`, true);
+        if (data.ai_configured) setStatus("AI 陪伴已连接", `当前会优先使用 ${(data.provider || "AI").toUpperCase()} 的 ${data.model || "模型"} 生成更自然的回应。`, true);
         else setStatus("本地温柔模式", "服务端在线，但还没配置 API key，所以会先用本地陪伴逻辑继续回应。", false);
       } catch (error) {
         setStatus("离线陪伴模式", "暂时连不上服务端，我会先用网页里的温柔模式继续陪你说话。", false);
