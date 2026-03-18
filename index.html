@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>微光对话</title>
+  <style>
+    :root {
+      --bg-top: #f8efe4;
+      --bg-bottom: #dfe9f5;
+      --card: rgba(255, 252, 248, 0.88);
+      --line: rgba(104, 84, 56, 0.14);
+      --text: #2b2117;
+      --muted: #766250;
+      --brand: #c96f4a;
+      --brand-deep: #9f4e31;
+      --user: #f8d7c8;
+      --bot: #fffaf5;
+      --shadow: 0 24px 60px rgba(81, 53, 24, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Georgia, "Noto Serif SC", "Microsoft YaHei", serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.92), transparent 35%),
+        radial-gradient(circle at bottom right, rgba(244, 192, 149, 0.42), transparent 28%),
+        linear-gradient(160deg, var(--bg-top), var(--bg-bottom));
+    }
+
+    .shell {
+      width: min(100%, 1120px);
+      margin: 0 auto;
+      padding: 32px 18px 40px;
+    }
+
+    .panel {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .intro,
+    .chat {
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      background: var(--card);
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+    }
+
+    .intro {
+      padding: 30px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .intro::after {
+      content: "";
+      position: absolute;
+      inset: auto -40px -60px auto;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      background: rgba(201, 111, 74, 0.12);
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.7);
+      color: var(--brand-deep);
+      font-size: 13px;
+      letter-spacing: 0.08em;
+    }
+
+    h1 {
+      margin: 18px 0 14px;
+      font-size: clamp(34px, 5vw, 52px);
+      line-height: 1.02;
+      font-weight: 600;
+    }
+
+    .lead {
+      margin: 0 0 22px;
+      color: var(--muted);
+      line-height: 1.8;
+      font-size: 16px;
+    }
+
+    .prompt-list {
+      display: grid;
+      gap: 10px;
+      margin: 24px 0;
+    }
+
+    .prompt-card {
+      padding: 14px 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(104, 84, 56, 0.1);
+      line-height: 1.6;
+    }
+
+    .prompt-card strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 14px;
+      color: var(--brand-deep);
+    }
+
+    .notice {
+      margin: 26px 0 0;
+      padding-top: 18px;
+      border-top: 1px dashed rgba(104, 84, 56, 0.2);
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .chat {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      min-height: 760px;
+      overflow: hidden;
+    }
+
+    .chat-top {
+      padding: 22px 24px 16px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0));
+    }
+
+    .chat-top h2 {
+      margin: 0 0 6px;
+      font-size: 24px;
+    }
+
+    .chat-top p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
+    .messages {
+      padding: 22px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      scroll-behavior: smooth;
+    }
+
+    .message {
+      max-width: 78%;
+      padding: 16px 18px;
+      border-radius: 22px;
+      line-height: 1.75;
+      font-size: 15px;
+      animation: rise 0.35s ease;
+      white-space: pre-wrap;
+    }
+
+    .message.bot {
+      align-self: flex-start;
+      background: var(--bot);
+      border: 1px solid rgba(104, 84, 56, 0.1);
+      border-top-left-radius: 8px;
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: var(--user);
+      border-top-right-radius: 8px;
+    }
+
+    .quick-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 0 22px 18px;
+    }
+
+    .quick-btn {
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.82);
+      color: var(--brand-deep);
+      cursor: pointer;
+      transition: transform 0.2s ease, background 0.2s ease;
+      font: inherit;
+    }
+
+    .quick-btn:hover {
+      transform: translateY(-1px);
+      background: rgba(255, 248, 241, 1);
+    }
+
+    .composer {
+      padding: 18px 22px 22px;
+      border-top: 1px solid var(--line);
+      background: rgba(255, 252, 248, 0.82);
+    }
+
+    .composer-box {
+      display: grid;
+      grid-template-columns: 1fr 120px;
+      gap: 12px;
+      align-items: end;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 92px;
+      max-height: 220px;
+      resize: vertical;
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(104, 84, 56, 0.18);
+      background: rgba(255, 255, 255, 0.95);
+      color: var(--text);
+      font: inherit;
+      line-height: 1.7;
+      outline: none;
+    }
+
+    textarea:focus {
+      border-color: rgba(201, 111, 74, 0.6);
+      box-shadow: 0 0 0 4px rgba(201, 111, 74, 0.12);
+    }
+
+    .send-btn {
+      height: 56px;
+      border: 0;
+      border-radius: 18px;
+      background: linear-gradient(135deg, var(--brand), var(--brand-deep));
+      color: #fff9f5;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 12px 24px rgba(159, 78, 49, 0.24);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .send-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 16px 28px rgba(159, 78, 49, 0.28);
+    }
+
+    .composer-tip {
+      margin: 12px 2px 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (max-width: 920px) {
+      .panel {
+        grid-template-columns: 1fr;
+      }
+
+      .chat {
+        min-height: 680px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        padding: 16px 12px 24px;
+      }
+
+      .intro,
+      .chat {
+        border-radius: 22px;
+      }
+
+      .chat-top,
+      .messages,
+      .composer,
+      .quick-actions {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .message {
+        max-width: 92%;
+      }
+
+      .composer-box {
+        grid-template-columns: 1fr;
+      }
+
+      .send-btn {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="panel">
+      <aside class="intro">
+        <div class="eyebrow">WARM SPACE</div>
+        <h1>微光对话</h1>
+        <p class="lead">
+          这是一个温柔的小角落。你可以讲讲最近的生活、压力、遗憾，或者只是说一句“我今天很累”。
+          页面会用陪伴式的方式回应你，先认真听，再给一点鼓励。
+        </p>
+
+        <div class="prompt-list">
+          <div class="prompt-card">
+            <strong>可以聊什么</strong>
+            最近最难的一件事、你放不下的人、工作和学习压力、想坚持却快撑不住的梦想。
+          </div>
+          <div class="prompt-card">
+            <strong>这个网页会怎么回应</strong>
+            它会邀请对方讲故事，承认辛苦，提炼你已经做得很好的部分，再给出一句鼓励和一个温和的问题。
+          </div>
+          <div class="prompt-card">
+            <strong>适合的语气</strong>
+            平静、真诚、不说教，不过度夸张，像一个愿意听你慢慢说的人。
+          </div>
+        </div>
+
+        <p class="notice">
+          提醒：这是一个鼓励型网页示例，不代替专业心理或医疗支持。
+          如果有人正处在紧急危险中，应该尽快联系家人、朋友、当地紧急服务或专业援助人员。
+        </p>
+      </aside>
+
+      <section class="chat">
+        <div class="chat-top">
+          <h2>今天想从哪里说起？</h2>
+          <p>把你的故事写下来，按发送。也可以点击下面的示例句子开始。</p>
+        </div>
+
+        <div class="messages" id="messages" aria-live="polite"></div>
+
+        <div class="quick-actions">
+          <button class="quick-btn" type="button" data-prompt="我最近真的很累，好像什么都做不好。">我最近很累</button>
+          <button class="quick-btn" type="button" data-prompt="我明明已经很努力了，可还是没有得到想要的结果。">努力却没结果</button>
+          <button class="quick-btn" type="button" data-prompt="我有很多心里话，但不知道该和谁说。">不知道和谁说</button>
+          <button class="quick-btn" type="button" data-prompt="我想听一句鼓励，帮我继续撑一撑。">想听一句鼓励</button>
+        </div>
+
+        <div class="composer">
+          <div class="composer-box">
+            <textarea id="userInput" placeholder="写下你的故事，比如：今天发生了什么？你最在意的是什么？"></textarea>
+            <button class="send-btn" id="sendBtn" type="button">发送</button>
+          </div>
+          <p class="composer-tip">按 Enter 发送，按 Shift + Enter 换行。</p>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const messages = document.getElementById("messages");
+    const userInput = document.getElementById("userInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const quickButtons = document.querySelectorAll(".quick-btn");
+
+    const state = {
+      turnCount: 0,
+      recentOpeners: [],
+      recentReflections: [],
+      recentFollowUps: [],
+      memory: []
+    };
+
+    const openingMessage = [
+      "你好，欢迎来到微光对话。",
+      "你不用把话说得很完整，我们可以像真实聊天一样，慢慢讲。最近最想被理解的一件事是什么？"
+    ].join("\n");
+
+    const openerPool = {
+      first: [
+        "谢谢你愿意开口和我说这些。",
+        "我认真看完了你刚刚的话。",
+        "你能这样说出来，我会把它当成很重要的信任。"
+      ],
+      later: [
+        "我接住你刚刚这段话了。",
+        "你继续这样说，我能更明白你在经历什么。",
+        "我还在，刚刚那句话我有认真看到。"
+      ]
+    };
+
+    const persistenceLines = [
+      "这听起来不像是一时情绪，而是已经在你心里压了一阵子。",
+      "从你的说法里能感觉到，这件事不是一下子发生的，而是慢慢把你耗住了。",
+      "你不是突然脆弱了，更像是前面已经忍了很久。"
+    ];
+
+    const generalAffirmations = [
+      "你能把感受说出来，本身就是一种很不容易的勇敢。",
+      "你现在需要的不是被催着振作，而是先被好好理解一下。",
+      "就算你现在状态不好，也不代表你整个人不好。"
+    ];
+
+    const emotionRules = [
+      {
+        id: "exhausted",
+        pattern: /(累|疲惫|撑不住|崩溃|扛不住|好累|没力气|精疲力尽|心力交瘁)/,
+        reflections: [
+          "那种一直撑着、却越来越没力气的感觉，真的很消耗人。",
+          "读到这里，我会先想到你可能已经不是累了一天，而是累了很久。",
+          "当一个人总在硬撑的时候，连说出“我很累”都已经不容易了。"
+        ],
+        affirmations: [
+          "你不是不够努力，你更像是已经努力过头了。",
+          "先承认自己真的很辛苦，不代表认输，反而是对自己诚实。",
+          "你能走到现在，说明你一直没有轻易放弃。"
+        ],
+        followUps: [
+          "如果把这份累拆开看，最压着你的，是身体上的疲惫，还是心里的那种撑不动？",
+          "最近有没有哪个时刻，让你特别明显地觉得自己快到极限了？",
+          "你最想先放下的一块压力，具体是什么？"
+        ]
+      },
+      {
+        id: "sad",
+        pattern: /(难过|委屈|失落|想哭|伤心|心酸|低落|沮丧)/,
+        reflections: [
+          "有些难过不是一句“没事”就能过去的，我能感觉到这件事真的碰到了你心里很深的地方。",
+          "你会这么难受，说明这件事对你并不轻，它真的影响到你了。",
+          "这种情绪像是一直压在心口，不一定很吵，但很沉。"
+        ],
+        affirmations: [
+          "难过并不说明你脆弱，只说明你真的在乎。",
+          "你现在的反应不是夸张，而是这件事对你来说确实重要。",
+          "能承认自己受伤了，其实也是一种清醒。"
+        ],
+        followUps: [
+          "如果你愿意，可以告诉我，哪一个细节最让你难受？",
+          "这份难过里，更多是遗憾、委屈，还是一种说不出的失落？",
+          "你最希望别人理解你的是哪一部分？"
+        ]
+      },
+      {
+        id: "self_doubt",
+        pattern: /(失败|没考上|没通过|做不好|不行|糟糕|差劲|是不是我有问题|我太差|不够好)/,
+        reflections: [
+          "受挫之后，人很容易把所有问题都推回自己身上，这会格外刺痛。",
+          "我能感觉到，你现在难受的不只是结果，还有那种开始怀疑自己的感觉。",
+          "真正折磨人的，往往不只是没成功，而是那句“是不是我不够好”。"
+        ],
+        affirmations: [
+          "一次失利不等于你整个人没有价值。",
+          "你在意结果，恰恰说明你认真投入过。",
+          "现在先别急着用最重的话评价自己。"
+        ],
+        followUps: [
+          "你最放不过自己的，是结果本身，还是觉得辜负了谁的期待？",
+          "如果把“失败”这件事先放一边，你最想被看见的努力是什么？",
+          "这件事之后，你心里最常冒出来的那句话是什么？"
+        ]
+      },
+      {
+        id: "lonely",
+        pattern: /(孤独|一个人|没人|没有人懂|没人懂|无助|找不到人说|没地方说)/,
+        reflections: [
+          "那种心里有很多话，却不知道该找谁说的感觉，真的会把人困得很深。",
+          "被困在情绪里又没有人接住的时候，连呼吸都会变得有点重。",
+          "你现在能在这里开口，本身就已经是在替自己争取一点陪伴了。"
+        ],
+        affirmations: [
+          "你不是不值得被理解，只是你现在还没遇到能好好接住这份感受的人。",
+          "不是你太麻烦，而是这份心事本来就需要被认真听。",
+          "愿意继续说下去，说明你心里还在努力靠近连接。"
+        ],
+        followUps: [
+          "你现在最想对一个真正懂你的人说的第一句话，会是什么？",
+          "这种孤单感，是最近才变重的，还是已经持续很久了？",
+          "如果身边有一个不会评判你的人，你最想先让他知道什么？"
+        ]
+      },
+      {
+        id: "pressure",
+        pattern: /(工作|上班|同事|老板|加班|学习|考试|成绩|任务|deadline|业绩|考研|毕业)/i,
+        reflections: [
+          "长期被工作或学习压着，人很容易只看到自己的不足，忘了自己其实已经在扛很多东西。",
+          "这种压力最磨人的地方，常常不是某一件大事，而是它每天都在。",
+          "当责任和期待一直堆过来，人会慢慢变得只会要求自己。"
+        ],
+        affirmations: [
+          "你能撑着往前走，已经说明你有在认真承担。",
+          "压力把人压得喘不过气，并不代表你能力差，而是负担真的重。",
+          "你现在需要的也许不是更拼一点，而是先让自己缓一口气。"
+        ],
+        followUps: [
+          "最近最消耗你的，是事情太多，还是总觉得怎么做都不够？",
+          "在这些压力里，哪一块最让你没有喘息感？",
+          "如果今天只能先处理一件最重要的事，你会选哪一件？"
+        ]
+      },
+      {
+        id: "relationship",
+        pattern: /(家人|父母|妈妈|爸爸|孩子|婚姻|感情|分手|朋友|爱人|对象|伴侣)/,
+        reflections: [
+          "和重要的人有关的事，往往最容易牵动情绪，因为那里放着期待、在乎和很多没说完的话。",
+          "越是重要的关系，带来的难受就越不像表面那么简单。",
+          "这类事最难的地方，是你很难真的做到“不在乎”。"
+        ],
+        affirmations: [
+          "你会这么在意，说明你是真的投入过、珍惜过。",
+          "被重要关系伤到，不是因为你不成熟，而是因为它本来就重要。",
+          "你已经很努力地在处理自己的感受了。"
+        ],
+        followUps: [
+          "如果只说一个最卡住你的点，那会是误解、失望，还是舍不得？",
+          "这段关系里，你最想被对方看见的是什么？",
+          "你现在更难受的是发生了什么，还是对方没有理解你？"
+        ]
+      },
+      {
+        id: "confused",
+        pattern: /(迷茫|未来|方向|梦想|坚持|不知道怎么办|不知道怎么做|不知道该不该|选择)/,
+        reflections: [
+          "对未来感到迷茫，不一定是没有方向，很多时候只是你站在一个很需要整理自己的路口。",
+          "人到分岔口的时候，会乱、会怕、会反复，其实都很正常。",
+          "你现在像是在一堆可能性里来回拉扯，难怪会这么累。"
+        ],
+        affirmations: [
+          "迷茫不是退步，它常常是认真思考的人才会经历的阶段。",
+          "你不是没有答案，而是还在把真正重要的东西辨认出来。",
+          "先不用逼自己立刻想通全部。"
+        ],
+        followUps: [
+          "如果不考虑别人怎么看，你心里其实最偏向哪一种选择？",
+          "你现在最怕的，是选错，还是选了以后承担不起结果？",
+          "这件事里，有没有哪一部分其实是你已经很清楚的？"
+        ]
+      }
+    ];
+
+    const topicRules = [
+      {
+        id: "work",
+        pattern: /(工作|上班|同事|老板|加班|任务|业绩|职场)/,
+        lines: [
+          "工作上的消耗往往隐蔽，因为它会把人的自我评价也一起卷进去。",
+          "职场里最难受的常常不是忙，而是忙完以后还觉得自己不够好。 "
+        ]
+      },
+      {
+        id: "study",
+        pattern: /(学习|考试|成绩|考研|毕业|论文|学校)/,
+        lines: [
+          "学习上的压力很会伪装成“你还不够”，久了就特别容易让人怀疑自己。",
+          "当成绩和未来绑在一起的时候，心里的重量会被放大很多。"
+        ]
+      },
+      {
+        id: "relationship",
+        pattern: /(感情|分手|朋友|爱人|对象|伴侣|婚姻)/,
+        lines: [
+          "关系里的疼往往不只是因为发生了什么，还因为你曾经认真期待过。",
+          "越是真心对待过的人和事，松手的时候就越难。"
+        ]
+      },
+      {
+        id: "family",
+        pattern: /(家人|父母|妈妈|爸爸|孩子)/,
+        lines: [
+          "和家人有关的情绪，常常会掺着责任、愧疚和很多说不清的牵挂。",
+          "家人的事之所以难，是因为它很少只是对错，而是很多情感缠在一起。"
+        ]
+      },
+      {
+        id: "future",
+        pattern: /(未来|方向|梦想|选择|人生)/,
+        lines: [
+          "关于未来的焦虑，常常不是因为你不想努力，而是因为你真的很想把路走对。",
+          "当一个人认真思考以后要怎么活，迷茫本身就会变得很真实。"
+        ]
+      }
+    ];
+
+    function addMessage(role, text) {
+      const bubble = document.createElement("div");
+      bubble.className = "message " + role;
+      bubble.textContent = text;
+      messages.appendChild(bubble);
+      messages.scrollTop = messages.scrollHeight;
+    }
+
+    function pick(list) {
+      return list[Math.floor(Math.random() * list.length)];
+    }
+
+    function remember(key, value, limit) {
+      if (!value || !state[key]) {
+        return;
+      }
+
+      state[key].push(value);
+      if (state[key].length > limit) {
+        state[key].shift();
+      }
+    }
+
+    function pickFresh(list, key, limit = 3) {
+      const history = state[key] || [];
+      const candidates = list.filter((item) => !history.includes(item));
+      const choice = pick(candidates.length ? candidates : list);
+      remember(key, choice, limit);
+      return choice;
+    }
+
+    function normalizeText(text) {
+      return text.replace(/\s+/g, " ").trim();
+    }
+
+    function splitClauses(text) {
+      return normalizeText(text)
+        .split(/[。！？!\?\n,，；;：:]/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    }
+
+    function extractQuote(text) {
+      const cleaned = text.replace(/[“”"'「」]/g, "");
+      const clauses = splitClauses(cleaned);
+      if (!clauses.length) {
+        return "";
+      }
+
+      const candidate = clauses
+        .filter((part) => part.length >= 6)
+        .sort((left, right) => Math.abs(left.length - 14) - Math.abs(right.length - 14))[0] || clauses[0];
+
+      if (candidate.length > 22) {
+        return candidate.slice(0, 22) + "...";
+      }
+
+      return candidate;
+    }
+
+    function detectRule(text, rules) {
+      return rules.find((rule) => rule.pattern.test(text)) || null;
+    }
+
+    function detectNeed(text) {
+      if (/(怎么办|怎么做|怎么调整|怎么熬|该怎么|要不要|该不该)/.test(text)) {
+        return "advice";
+      }
+
+      if (/(鼓励我|安慰我|抱抱我|想听一句鼓励|给我一点力量)/.test(text)) {
+        return "comfort";
+      }
+
+      return "listening";
+    }
+
+    function hasPersistence(text) {
+      return /(一直|总是|每天|反复|很久|越来越|老是|最近总)/.test(text);
+    }
+
+    function hasSelfBlame(text) {
+      return /(是不是我|都是我不好|我太差|我不配|我有问题|怪我)/.test(text);
+    }
+
+    function buildAdvice(text, emotion, topic) {
+      if (/(是不是我|我太差|我有问题|不够好)/.test(text)) {
+        return "我不觉得这能直接说明你差。人在挫败里很容易把所有问题都往自己身上归，但事实通常没有这么简单。";
+      }
+
+      if (/(想听一句鼓励|鼓励我|安慰我)/.test(text)) {
+        return "那我认真对你说一句：你已经做得比自己以为的更多了，别急着否定这个还在努力的自己。";
+      }
+
+      if (emotion && emotion.id === "exhausted") {
+        return "如果现在整件事大到让你喘不过气，我们先别要求自己一次解决全部。先把今天缩小成一件最要紧的小事，做完就算过关。";
+      }
+
+      if (emotion && emotion.id === "self_doubt") {
+        return "先不要急着给自己下结论。你可以试着把“结果不理想”和“我这个人不行”分开来看，这两件事并不是一回事。";
+      }
+
+      if (topic && topic.id === "relationship") {
+        return "和关系有关的事，很多时候不是立刻解决才算前进。先分清楚你最在意的是被理解、被尊重，还是这段关系本身，会更容易看清下一步。";
+      }
+
+      if (topic && (topic.id === "work" || topic.id === "study")) {
+        return "先别同时处理所有压力。把现在最急、最重要、最能推进一点点的那件事挑出来，先做它，通常会比一直在心里打转更能缓一口气。";
+      }
+
+      return "如果你愿意，我们先不要想着一下子解决全部，只挑眼前最具体的一小块，一起把它说清楚。";
+    }
+
+    function buildReflection(text, quote, emotion, topic) {
+      const lines = [];
+
+      if (quote) {
+        lines.push("你提到“" + quote + "”，这句话里其实已经有很多重量了。");
+      }
+
+      if (emotion) {
+        lines.push(pick(emotion.reflections));
+      }
+
+      if (topic) {
+        lines.push(pick(topic.lines));
+      }
+
+      if (hasPersistence(text)) {
+        lines.push(pickFresh(persistenceLines, "recentReflections", 4));
+      }
+
+      if (hasSelfBlame(text)) {
+        lines.push("而且我注意到，你在难受的时候也在把责任往自己身上揽，这通常会让心更累。");
+      }
+
+      return lines;
+    }
+
+    function buildFollowUp(need, emotion, topic) {
+      if (need === "advice") {
+        return pickFresh([
+          "如果你愿意，我们可以先只看眼前这一小步。现在最想先稳住的，是哪一部分？",
+          "要不我们把这件事拆小一点。你现在最需要解决的第一件具体小事是什么？",
+          "比起一下子想通全部，也许先回答一个问题会更有用：此刻最让你卡住的点到底是什么？"
+        ], "recentFollowUps");
+      }
+
+      if (emotion) {
+        return pickFresh(emotion.followUps, "recentFollowUps");
+      }
+
+      if (topic) {
+        return pickFresh([
+          "如果继续往下说，你最想先讲清楚的那个细节是什么？",
+          "在这整件事里，最让你过不去的点是哪个？",
+          "你最希望被理解的一句话，会是什么？"
+        ], "recentFollowUps");
+      }
+
+      return pickFresh([
+        "如果你愿意，可以继续说说这件事最戳你的地方是什么。",
+        "我在听。你想从哪个细节继续往下讲都可以。",
+        "你已经说得很认真了。要不要再往前讲一点点？"
+      ], "recentFollowUps");
+    }
+
+    function buildReply(input) {
+      const text = normalizeText(input);
+      if (!text) {
+        return "我在这里。你可以从一句很简单的话开始，比如：我今天很累，或者我最近有点难过。";
+      }
+
+      const emotion = detectRule(text, emotionRules);
+      const topic = detectRule(text, topicRules);
+      const need = detectNeed(text);
+      const quote = extractQuote(text);
+      const userTurns = state.memory.filter((item) => item.role === "user").length;
+      const previousUser = [...state.memory].reverse().find((item) => item.role === "user");
+      const parts = [];
+
+      parts.push(pickFresh(userTurns === 0 ? openerPool.first : openerPool.later, "recentOpeners"));
+
+      if (previousUser && previousUser.emotion === (emotion && emotion.id)) {
+        parts.push("我也注意到，这份感受在你这几句话里一直都在，说明它不是轻飘飘的一阵情绪。");
+      }
+
+      parts.push(...buildReflection(text, quote, emotion, topic));
+
+      if (need === "advice") {
+        parts.push(buildAdvice(text, emotion, topic));
+      } else if (emotion) {
+        parts.push(pick(emotion.affirmations));
+      } else {
+        parts.push(pick(generalAffirmations));
+      }
+
+      parts.push(buildFollowUp(need, emotion, topic));
+
+      state.turnCount += 1;
+      state.memory.push({
+        role: "user",
+        text,
+        emotion: emotion ? emotion.id : "",
+        topic: topic ? topic.id : ""
+      });
+
+      return parts.filter(Boolean).join("\n\n");
+    }
+
+    function sendMessage(text) {
+      const content = text.trim();
+      if (!content) {
+        addMessage("bot", "我在这里。你可以先写一句最真实的话，比如：我最近很累。");
+        return;
+      }
+
+      addMessage("user", content);
+      userInput.value = "";
+
+      window.setTimeout(() => {
+        addMessage("bot", buildReply(content));
+      }, 280);
+    }
+
+    sendBtn.addEventListener("click", () => sendMessage(userInput.value));
+
+    userInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage(userInput.value);
+      }
+    });
+
+    quickButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        userInput.value = button.dataset.prompt;
+        sendMessage(userInput.value);
+      });
+    });
+
+    addMessage("bot", openingMessage);
+  </script>
+</body>
+</html>
