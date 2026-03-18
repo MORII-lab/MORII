@@ -13,6 +13,8 @@ ENV_FILE = BASE_DIR / ".env"
 DEFAULT_AI_PROVIDER = "gemini"
 DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"
+DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
+DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 DEFAULT_PERSONA_NAME = "微光"
 DEFAULT_PERSONA_TAGLINE = "像一个沉静、真诚、不评判人的深夜来信朋友。"
 DEFAULT_CRISIS_SUPPORT_TEXT = "如果你有可能马上伤害自己、伤害他人，或已经无法保证安全，请立刻联系当地紧急服务，或马上去最近的医院/急诊。也请尽快联系一个你信任的人，让对方现在陪着你。"
@@ -104,26 +106,44 @@ def get_crisis_support_text() -> str:
 
 
 def get_ai_provider() -> str:
-    value = os.getenv("AI_PROVIDER", DEFAULT_AI_PROVIDER).strip().lower()
-    return value or DEFAULT_AI_PROVIDER
+    if os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip() or os.getenv("GEMINI_MODEL", "").strip():
+        return "gemini"
+
+    value = os.getenv("AI_PROVIDER", "").strip().lower()
+    if value:
+        return value
+
+    if os.getenv("GROQ_API_KEY", "").strip() or os.getenv("GROQ_MODEL", "").strip():
+        return "groq"
+
+    if os.getenv("OPENAI_API_KEY", "").strip() or os.getenv("OPENAI_MODEL", "").strip():
+        return "openai"
+
+    return DEFAULT_AI_PROVIDER
 
 
 def get_ai_key() -> str:
-    return (
-        os.getenv("GEMINI_API_KEY", "").strip()
-        or os.getenv("GOOGLE_API_KEY", "").strip()
-        or os.getenv("GROQ_API_KEY", "").strip()
-        or os.getenv("OPENAI_API_KEY", "").strip()
-    )
+    provider = get_ai_provider()
+    if provider == "gemini":
+        return os.getenv("GEMINI_API_KEY", "").strip() or os.getenv("GOOGLE_API_KEY", "").strip()
+    if provider == "groq":
+        return os.getenv("GROQ_API_KEY", "").strip()
+    if provider == "openai":
+        return os.getenv("OPENAI_API_KEY", "").strip()
+
+    return ""
 
 
 def get_ai_model() -> str:
-    return (
-        os.getenv("GEMINI_MODEL", "").strip()
-        or os.getenv("GROQ_MODEL", "").strip()
-        or os.getenv("OPENAI_MODEL", "").strip()
-        or DEFAULT_GEMINI_MODEL
-    )
+    provider = get_ai_provider()
+    if provider == "gemini":
+        return os.getenv("GEMINI_MODEL", "").strip() or DEFAULT_GEMINI_MODEL
+    if provider == "groq":
+        return os.getenv("GROQ_MODEL", "").strip() or DEFAULT_GROQ_MODEL
+    if provider == "openai":
+        return os.getenv("OPENAI_MODEL", "").strip() or DEFAULT_OPENAI_MODEL
+
+    return DEFAULT_GEMINI_MODEL
 
 
 def get_responses_url() -> str:
