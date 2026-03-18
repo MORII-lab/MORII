@@ -9,7 +9,7 @@ if not exist ".env" (
   if exist ".env.example" (
     copy /Y ".env.example" ".env" >nul
     echo 已根据 .env.example 创建 .env
-    echo 请把 GROQ_API_KEY 填进去，然后重新运行一次。
+    echo 请把 GEMINI_API_KEY 填进去，然后重新运行一次。
     echo.
   )
 )

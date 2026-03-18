@@ -10,9 +10,9 @@ from urllib import error, request
 BASE_DIR = Path(__file__).resolve().parent
 INDEX_FILE = BASE_DIR / "index.html"
 ENV_FILE = BASE_DIR / ".env"
-DEFAULT_AI_PROVIDER = "groq"
-DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1"
-DEFAULT_GROQ_MODEL = "llama-3.1-8b-instant"
+DEFAULT_AI_PROVIDER = "gemini"
+DEFAULT_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+DEFAULT_GEMINI_MODEL = "gemini-2.5-flash-lite"
 DEFAULT_PERSONA_NAME = "微光"
 DEFAULT_PERSONA_TAGLINE = "像一个沉静、真诚、不评判人的深夜来信朋友。"
 DEFAULT_CRISIS_SUPPORT_TEXT = "如果你有可能马上伤害自己、伤害他人，或已经无法保证安全，请立刻联系当地紧急服务，或马上去最近的医院/急诊。也请尽快联系一个你信任的人，让对方现在陪着你。"
@@ -79,6 +79,18 @@ def extract_output_text(payload: dict) -> str:
     return "\n\n".join(chunk for chunk in chunks if chunk).strip()
 
 
+def extract_gemini_output_text(payload: dict) -> str:
+    chunks = []
+    for candidate in payload.get("candidates", []):
+        content = candidate.get("content", {})
+        for part in content.get("parts", []):
+            text = str(part.get("text", "")).strip()
+            if text:
+                chunks.append(text)
+
+    return "\n\n".join(chunks).strip()
+
+
 def get_persona_name() -> str:
     return os.getenv("MORII_PERSONA_NAME", DEFAULT_PERSONA_NAME).strip() or DEFAULT_PERSONA_NAME
 
@@ -98,24 +110,75 @@ def get_ai_provider() -> str:
 
 def get_ai_key() -> str:
     return (
-        os.getenv("GROQ_API_KEY", "").strip()
+        os.getenv("GEMINI_API_KEY", "").strip()
+        or os.getenv("GOOGLE_API_KEY", "").strip()
+        or os.getenv("GROQ_API_KEY", "").strip()
         or os.getenv("OPENAI_API_KEY", "").strip()
     )
 
 
 def get_ai_model() -> str:
     return (
-        os.getenv("GROQ_MODEL", "").strip()
+        os.getenv("GEMINI_MODEL", "").strip()
+        or os.getenv("GROQ_MODEL", "").strip()
         or os.getenv("OPENAI_MODEL", "").strip()
-        or DEFAULT_GROQ_MODEL
+        or DEFAULT_GEMINI_MODEL
     )
 
 
 def get_responses_url() -> str:
-    if get_ai_provider() == "openai":
+    provider = get_ai_provider()
+    if provider == "openai":
         base_url = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1").strip()
-    else:
-        base_url = os.getenv("GROQ_BASE_URL", DEFAULT_GROQ_BASE_URL).strip()
+        return base_url.rstrip("/") + "/responses"
+
+    if provider == "groq":
+        base_url = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
+        return base_url.rstrip("/") + "/responses"
+
+    base_url = os.getenv("GEMINI_BASE_URL", DEFAULT_GEMINI_BASE_URL).strip()
+    model = get_ai_model()
+    return base_url.rstrip("/") + f"/models/{model}:generateContent"
+
+
+def build_gemini_system_instruction(memory_items) -> str:
+    parts = [build_system_prompt()]
+    memory_prompt = build_memory_prompt(memory_items)
+    if memory_prompt:
+        parts.append(memory_prompt)
+
+    return "\n\n".join(part.strip() for part in parts if part.strip())
+
+
+def build_gemini_contents(messages):
+    contents = []
+    pending = None
+
+    for message in messages:
+        role = "user" if message["role"] == "user" else "model"
+        text = message["content"].strip()
+        if not text:
+            continue
+
+        if role == "model" and not contents and pending is None:
+            continue
+
+        if pending and pending["role"] == role:
+            pending["parts"][0]["text"] += f"\n\n{text}"
+            continue
+
+        if pending:
+            contents.append(pending)
+
+        pending = {
+            "role": role,
+            "parts": [{"text": text}]
+        }
+
+    if pending:
+        contents.append(pending)
+
+    return contents
 
     return base_url.rstrip("/") + "/responses"
 
@@ -347,42 +410,72 @@ class MoriiHandler(BaseHTTPRequestHandler):
         return
 
     def _call_ai(self, messages, memory_items) -> str:
+        provider = get_ai_provider()
         model = get_ai_model()
         api_key = get_ai_key()
-        memory_prompt = build_memory_prompt(memory_items)
+        request_url = get_responses_url()
 
-        prompt_inputs = [
-            {"role": "developer", "content": build_system_prompt()}
-        ]
-        if memory_prompt:
-            prompt_inputs.append({"role": "developer", "content": memory_prompt})
+        if provider == "gemini":
+            contents = build_gemini_contents(messages)
+            if not contents:
+                raise RuntimeError("Gemini conversation payload is empty.")
 
-        request_body = {
-            "model": model,
-            "input": [
-                *prompt_inputs,
-                *messages
-            ],
-            "max_output_tokens": 360
-        }
+            request_body = {
+                "system_instruction": {
+                    "parts": [{"text": build_gemini_system_instruction(memory_items)}]
+                },
+                "contents": contents,
+                "generationConfig": {
+                    "maxOutputTokens": 360,
+                    "temperature": 0.9
+                }
+            }
 
-        raw_request = json.dumps(request_body).encode("utf-8")
-        api_request = request.Request(
-            get_responses_url(),
-            data=raw_request,
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            },
-            method="POST"
-        )
+            raw_request = json.dumps(request_body).encode("utf-8")
+            api_request = request.Request(
+                f"{request_url}?key={api_key}",
+                data=raw_request,
+                headers={"Content-Type": "application/json"},
+                method="POST"
+            )
+        else:
+            memory_prompt = build_memory_prompt(memory_items)
+            prompt_inputs = [
+                {"role": "developer", "content": build_system_prompt()}
+            ]
+            if memory_prompt:
+                prompt_inputs.append({"role": "developer", "content": memory_prompt})
+
+            request_body = {
+                "model": model,
+                "input": [
+                    *prompt_inputs,
+                    *messages
+                ],
+                "max_output_tokens": 360
+            }
+
+            raw_request = json.dumps(request_body).encode("utf-8")
+            api_request = request.Request(
+                request_url,
+                data=raw_request,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                method="POST"
+            )
 
         with request.urlopen(api_request, timeout=60) as response:
             payload = json.loads(response.read().decode("utf-8"))
 
-        text = extract_output_text(payload)
+        if provider == "gemini":
+            text = extract_gemini_output_text(payload)
+        else:
+            text = extract_output_text(payload)
+
         if not text:
-            raise RuntimeError(f"{get_ai_provider().title()} returned no assistant text.")
+            raise RuntimeError(f"{provider.title()} returned no assistant text.")
 
         return text
 
