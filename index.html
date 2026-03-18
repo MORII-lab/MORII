@@ -543,11 +543,224 @@
       state.memoryCards = state.memoryCards.slice(-6);
     }
 
+    function getRecentUserMessages(limit = 3) {
+      return state.history
+        .filter((item) => item.role === "user" && !item.pending)
+        .slice(-limit)
+        .map((item) => item.content);
+    }
+
+    function extractKeyPhrase(text) {
+      const clean = String(text || "").replace(/\s+/g, " ").trim();
+      if (!clean) return "";
+
+      const segments = clean
+        .split(/[。！？!?；;，,\n]/)
+        .map((segment) => segment.trim())
+        .filter(Boolean)
+        .sort((a, b) => b.length - a.length);
+
+      const preferred = segments.find((segment) => segment.length >= 6 && segment.length <= 26);
+      const raw = preferred || segments[0] || clean;
+      return trimPreview(raw, 24);
+    }
+
+    function detectEmotionTag(text) {
+      const content = String(text || "");
+      if (/(累|疲惫|撑不住|扛不住|崩溃|压得喘不过气)/.test(content)) return "exhausted";
+      if (/(不够好|失败|没用|差劲|自责|是不是我有问题)/.test(content)) return "self_doubt";
+      if (/(孤单|一个人|没人懂|没人听|被忽略)/.test(content)) return "lonely";
+      if (/(委屈|难受|想哭|心里堵|压抑)/.test(content)) return "hurt";
+      if (/(迷茫|不知道怎么办|看不到未来|不知道怎么选)/.test(content)) return "lost";
+      if (/(麻木|空空的|提不起劲|没感觉)/.test(content)) return "numb";
+      if (/(生气|烦|火大|忍不住)/.test(content)) return "angry";
+      return "general";
+    }
+
+    function detectTopicTag(text) {
+      const content = String(text || "");
+      if (/(工作|上班|加班|开会|绩效|同事|老板|面试|职业|实习)/.test(content)) return "work";
+      if (/(家人|父母|妈妈|爸爸)/.test(content)) return "family";
+      if (/(伴侣|对象|男朋友|女朋友|喜欢的人|分手|关系)/.test(content)) return "relationship";
+      if (/(未来|选择|方向|毕业|读研|留学|转行)/.test(content)) return "future";
+      if (/(睡不着|失眠|凌晨|深夜)/.test(content)) return "sleep";
+      if (/(朋友|社交|孤单|没人陪)/.test(content)) return "connection";
+      return "general";
+    }
+
+    function buildHumanOpening(text, emotion) {
+      const phrase = extractKeyPhrase(text);
+      const openers = {
+        exhausted: [
+          `看到你说“${phrase}”，我第一感觉是，你真的已经撑了很久。`,
+          `你提到“${phrase}”，这句话里那种硬撑的感觉很明显。`
+        ],
+        self_doubt: [
+          `你说“${phrase}”，我能感觉到你现在对自己很苛刻。`,
+          `看到“${phrase}”这句，我会先心疼你把责任都压在自己身上了。`
+        ],
+        lonely: [
+          `你提到“${phrase}”，我能感觉到那种没人接住的孤单。`,
+          `看到“${phrase}”这句，会让人很想先陪你坐一会儿。`
+        ],
+        hurt: [
+          `你说“${phrase}”，我会先把那份委屈接住。`,
+          `“${phrase}”这句很重，我能感觉到你心里已经憋了不少。`
+        ],
+        lost: [
+          `看到你说“${phrase}”，会感觉你现在像站在一个很难选的位置。`,
+          `“${phrase}”这句里有种不知道该往哪边走的疲惫。`
+        ],
+        numb: [
+          `你提到“${phrase}”，那种发空的感觉我能听出来。`,
+          `看到“${phrase}”，我会觉得你不是不在意，而是已经太久没缓过来了。`
+        ],
+        angry: [
+          `你说“${phrase}”，能感觉到你心里已经憋了很多火和委屈。`,
+          `看到“${phrase}”这句，会知道你不是小题大做，是真的被逼到了。`
+        ],
+        general: [
+          `看到你说“${phrase}”，我会先认真把这句话接住。`,
+          `你提到“${phrase}”，谢谢你愿意把它说出来。`
+        ]
+      };
+
+      return pick(openers[emotion] || openers.general);
+    }
+
+    function buildHumanReflection(text, emotion, topic) {
+      const byEmotion = {
+        exhausted: "你现在像是不只是累，而是已经有点靠意志在撑了。",
+        self_doubt: "你现在很容易把不顺都算成自己的问题，这会让人越想越重。",
+        lonely: "很多时候最难受的不是事情本身，而是没人能真正听见那份感受。",
+        hurt: "有些委屈不是一句“没事”能盖过去的，它会一直压在心口。",
+        lost: "迷茫最磨人的地方，是你已经很想往前走了，却不知道哪一步才不算走错。",
+        numb: "麻木常常不是冷漠，而是心里已经太久没有真正松下来过。",
+        angry: "你会这么生气，多半是因为有些界限被碰了，或者你忍了太久。",
+        general: "这件事对你不是轻飘飘的一句抱怨，而是真的在消耗你。"
+      };
+
+      const byTopic = {
+        work: "工作上的压力一旦连续堆着，人会连休息的时候都还在绷着。",
+        family: "和家人有关的事很容易又深又复杂，因为它常常不只是这一件事。",
+        relationship: "关系里的拉扯最耗人，因为你一边在意，一边又会怀疑自己该不该继续在意。",
+        future: "和未来有关的事之所以重，是因为每个选择都像在替以后的自己负责。",
+        sleep: "当连睡觉都开始受影响，通常说明你心里已经超负荷了一阵子。",
+        connection: "想被理解却找不到合适的人，那种落空感会把难受放大很多。",
+        general: ""
+      };
+
+      if (topic !== "general" && Math.random() > 0.45) {
+        return byTopic[topic];
+      }
+
+      return byEmotion[emotion] || byEmotion.general;
+    }
+
+    function buildContinuityLine(text) {
+      const recentUsers = getRecentUserMessages(3);
+      const previousUser = recentUsers.length > 1 ? recentUsers[recentUsers.length - 2] : "";
+
+      if (previousUser) {
+        const previousPhrase = extractKeyPhrase(previousUser);
+        if (previousPhrase && !text.includes(previousPhrase)) {
+          return `而且你前面也提到过“${previousPhrase}”，所以我知道这不是刚刚一闪而过的情绪。`;
+        }
+      }
+
+      if (state.memoryCards.length) {
+        const memory = state.memoryCards[state.memoryCards.length - 1];
+        if (memory && memory.text) {
+          return `我会记着你刚刚说过的那些线索，比如“${trimPreview(memory.text, 22)}”，所以我们不是在从零开始。`;
+        }
+      }
+
+      return pick([
+        "你不用急着把一切一次说完整，我们可以一点一点来。",
+        "你现在不需要马上想通，先把最压着你的部分说出来就已经很好了。"
+      ]);
+    }
+
+    function buildHumanQuestion(text, emotion, topic) {
+      if (String(text).length <= 12) {
+        return pick([
+          "如果你愿意，可以把刚才那句话再展开一点点给我听。",
+          "你想先从哪一小段开始说？我跟着你慢慢来。"
+        ]);
+      }
+
+      const topicQuestions = {
+        work: [
+          "最近最压着你的，是事情做不完，还是你一直得逼自己扛着？",
+          "工作里现在最让你喘不过气的，是哪一件具体的事？"
+        ],
+        family: [
+          "和家人有关的这部分，最让你疼的，是他们说了什么，还是你一直没法被理解？",
+          "这件事里，你最希望家里人能明白你什么？"
+        ],
+        relationship: [
+          "这段关系里，现在最让你难受的，是失望、拉扯，还是你开始怀疑自己？",
+          "如果只说最刺你的那一刻，会是哪一刻？"
+        ],
+        future: [
+          "你现在更怕的是选错，还是根本看不清下一步？",
+          "如果把未来这件事拆小一点，眼下最卡住你的选择是什么？"
+        ],
+        sleep: [
+          "你通常是在什么时刻最容易一下子停不下来，开始睡不着？",
+          "这些睡不着的夜里，脑子里最常反复出现的是什么？"
+        ],
+        connection: [
+          "你现在更想要的是有人给建议，还是有人先安静听你说完？",
+          "那种孤单里，最难受的是没人陪，还是没人真正懂你？"
+        ],
+        general: []
+      };
+
+      const emotionQuestions = {
+        exhausted: [
+          "如果只挑一件最让你透不过气的事，它会是什么？",
+          "你觉得自己是从什么时候开始明显扛不住的？"
+        ],
+        self_doubt: [
+          "你最近最常拿来责怪自己的那句话，是什么？",
+          "如果暂时不评判自己，这件事本来的样子会是什么？"
+        ],
+        lonely: [
+          "你最想让别人听见、却一直没机会说出口的那句话是什么？",
+          "现在如果真的有人坐在你旁边，你最想先对他说什么？"
+        ],
+        hurt: [
+          "这份委屈里，最让你咽不下去的是哪一句话或哪一幕？",
+          "你现在更像是想哭、想说出来，还是想先有人陪你缓一缓？"
+        ],
+        lost: [
+          "你现在最怕的结果是什么？",
+          "如果不用立刻做决定，你最想先弄明白哪一件事？"
+        ],
+        numb: [
+          "这种空空的状态，大概持续多久了？",
+          "最近有没有哪一刻，你其实差一点就想开口求助了？"
+        ],
+        angry: [
+          "这股火最早是从哪一刻开始冒上来的？",
+          "你现在更想发泄一下，还是想先把事情讲清楚？"
+        ],
+        general: [
+          "这件事里，现在最压着你的，是哪一部分？",
+          "如果把最难受的那一刻说给我听，会是哪一刻？"
+        ]
+      };
+
+      const pool = [...(topicQuestions[topic] || []), ...(emotionQuestions[emotion] || emotionQuestions.general)];
+      return pick(pool.length ? pool : emotionQuestions.general);
+    }
+
     function updateMemoryFromMessage(text) {
       const content = String(text || "").replace(/\s+/g, " ").trim();
       if (!content) return;
-      if (/(工作|上班|加班|开会|绩效|同事|老板|面试|职业|实习)/.test(content)) upsertMemoryCard("最近在承受", "工作或学业上的压力让你很累。");
-      if (/(家人|父母|妈妈|爸爸|伴侣|对象|男朋友|女朋友|朋友|关系|婚姻|分手)/.test(content)) upsertMemoryCard("关系里的事", "有重要关系正在让你受伤或拉扯。");
+      if (/(工作|上班|加班|开会|绩效|同事|老板|面试|职业|实习)/.test(content)) upsertMemoryCard("最近在承受", `工作或学业这条线最近一直在压着你，比如“${extractKeyPhrase(content)}”。`);
+      if (/(家人|父母|妈妈|爸爸|伴侣|对象|男朋友|女朋友|朋友|关系|婚姻|分手)/.test(content)) upsertMemoryCard("关系里的事", `关系里的拉扯还在影响你，比如“${extractKeyPhrase(content)}”。`);
       if (/(累|疲惫|撑不住|崩溃|压得喘不过气|麻木|烦|难受|委屈|孤单|空)/.test(content)) upsertMemoryCard("此刻状态", trimPreview(content, 42));
       if (/(想被听见|想倾诉|陪我|抱抱|安慰|鼓励|不知道怎么办|给我一点力量)/.test(content)) upsertMemoryCard("此刻更需要", "你现在更需要被接住、被理解，再一起慢慢整理。");
       if (/(睡不着|失眠|凌晨|深夜)/.test(content)) upsertMemoryCard("最近节奏", "这段时间你的休息状态可能不太稳。");
@@ -556,27 +769,13 @@
 
     function buildFallbackReply(userText) {
       const text = String(userText || "").trim();
-      const intro = pick([
-        "我听见了，你不是在小题大做。",
-        "谢谢你把这句话说出来，我会认真陪你接住它。",
-        "你能把这些说出来，本身就已经很不容易。"
-      ]);
-      const reflections = [];
-      if (/(累|疲惫|撑不住|崩溃)/.test(text)) reflections.push("你像是已经撑了很久，不只是身体累，心里也在硬撑。");
-      if (/(不够好|失败|没用|差劲|自责)/.test(text)) reflections.push("你现在对自己的要求很重，甚至有点把所有责任都揽到自己身上了。");
-      if (/(孤单|没人懂|没人听|一个人)/.test(text)) reflections.push("那种想说话却找不到合适对象的感觉，真的会让人更难受。");
-      if (/(工作|上班|加班|同事|老板|绩效)/.test(text)) reflections.push("工作像一直在往你身上加码，让你很难真正松下来。");
-      if (/(家人|父母|伴侣|朋友|关系|分手)/.test(text)) reflections.push("和重要的人之间出问题，往往比表面看起来更耗人。");
-      const reflection = reflections[0] || "我会先把这句话放轻一点接住，不急着替你下结论。";
-      const memoryHint = state.memoryCards.length
-        ? "我记得你前面提到过一些让你反复消耗的事，所以我知道这不是一时情绪。"
-        : "如果你愿意，我们可以从刚刚那句话里最刺痛你的那个词开始。";
-      const question = pick([
-        "这件事里，现在最压着你的，是哪一部分？",
-        "如果把最难受的那一刻说给我听，会是哪一刻？",
-        "你最希望此刻有人先帮你接住什么？"
-      ]);
-      return [intro, reflection, memoryHint, question].join("\n\n");
+      const emotion = detectEmotionTag(text);
+      const topic = detectTopicTag(text);
+      const opening = buildHumanOpening(text, emotion);
+      const reflection = buildHumanReflection(text, emotion, topic);
+      const continuity = buildContinuityLine(text);
+      const question = buildHumanQuestion(text, emotion, topic);
+      return [opening, reflection, continuity, question].join("\n\n");
     }
 
     function buildPayload() {
